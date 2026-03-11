@@ -17,7 +17,7 @@ cameras:
 
 detection:
   interval_frames: 3        # run detector every N frames
-  crowd_threshold: 3        # persons needed to trigger CROWD_FORMED (change freely)
+  crowd_threshold: 2        # persons needed to trigger CROWD_FORMED (change freely)
 
   # Cooldowns
   event_cooldown_s: 30      # NORMAL and SUSPICIOUS events
@@ -31,3 +31,7 @@ detection:
 
   # Weapon model (optional)
   weapon_model_path: null   # path to .pt with pistol/rifle/assault_rifle classes
+
+report:
+  interval_seconds: 120     # seconds between AI situation reports
+  alert_level: high         # normal | high — at high, every PERSON_DETECTED is vision-checked for military

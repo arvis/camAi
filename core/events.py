@@ -20,6 +20,12 @@ class EventSeverity(Enum):
     NORMAL = "NORMAL"
     SUSPICIOUS = "SUSPICIOUS"
     HIGH_ALERT = "HIGH_ALERT"
+    CRITICAL = "CRITICAL"
+
+
+class AlertLevel(Enum):
+    NORMAL = "NORMAL"
+    HIGH = "HIGH"
 
 
 @dataclass
@@ -32,6 +38,7 @@ class Event:
     detections: dict[str, int]
     tracks: list[dict]
     avg_confidence: float
+    frame_snapshot: bytes | None = None  # JPEG bytes, set by pipeline for PERSON_DETECTED
 
 
 # ---------------------------------------------------------------------------
@@ -73,7 +80,7 @@ class EventDetector:
         self,
         camera_id: str,
         camera_name: str,
-        crowd_threshold: int = 3,
+        crowd_threshold: int = 2,
         event_cooldown_s: float = 30.0,
         high_alert_cooldown_s: float = 10.0,
         loitering_timeout_s: float = 45.0,

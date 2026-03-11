@@ -37,7 +37,7 @@ def _make_detector(**kwargs):
     defaults = dict(
         camera_id="cam1",
         camera_name="Test",
-        crowd_threshold=3,
+        crowd_threshold=2,
         event_cooldown_s=30.0,
         high_alert_cooldown_s=10.0,
         loitering_timeout_s=45.0,
@@ -162,6 +162,13 @@ class TestEventDetectorUnhappy:
         types = [e.event_type for e in events]
         assert "CROWD_FORMED" not in types
 
+    def test_crowd_not_formed_with_one_person(self):
+        """CROWD_FORMED must not fire with only 1 person (default threshold is 2)."""
+        det = _make_detector()  # crowd_threshold=2
+        events = det.process({"person": 1}, [], now=1000.0)
+        types = [e.event_type for e in events]
+        assert "CROWD_FORMED" not in types
+
     def test_person_moving_not_fired_for_stationary(self):
         """PERSON_MOVING must not fire for stationary or unknown direction."""
         det = _make_detector()
@@ -222,6 +229,13 @@ class TestEventDetectorHappyNormal:
         events = det.process({"car": 1}, [], now=1000.0)
         ev = next(e for e in events if e.event_type == "VEHICLE_ARRIVED")
         assert ev.severity == EventSeverity.NORMAL
+
+    def test_crowd_formed_with_two_people(self):
+        """CROWD_FORMED fires when 2 people are present (default threshold is 2)."""
+        det = _make_detector()  # crowd_threshold=2
+        events = det.process({"person": 2}, [], now=1000.0)
+        types = [e.event_type for e in events]
+        assert "CROWD_FORMED" in types
 
     def test_crowd_formed_at_threshold(self):
         """CROWD_FORMED fires when person count reaches crowd_threshold."""

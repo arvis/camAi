@@ -53,6 +53,15 @@ Phones (IP Webcam MJPEG, shared WiFi network)
 - Rate limit: same `(camera_id, event_type)` not re-sent within `event_cooldown_s` seconds
 - Alert and report sending both go through `core/alerts.py`
 - Mattermost migration: change only `SLACK_WEBHOOK_URL` in `.env` — payload is compatible
+- Four severity levels: `NORMAL`, `SUSPICIOUS`, `HIGH_ALERT`, `CRITICAL`
+- `CRITICAL` is triggered by vision-LLM military detection at alert level HIGH
+
+### Alert level
+- Default: `high` (configured in `config.yaml` `report.alert_level`)
+- At `high`: every `PERSON_DETECTED` event with a frame snapshot is vision-checked for military indicators via LLM
+- If military/armed detected: `MILITARY_PERSON_DETECTED` event with severity `CRITICAL` is sent to Slack immediately
+- At `normal`: vision checks are skipped entirely
+- `AlertLevel` enum lives in `core/events.py`
 
 ### Dashboard
 - Core feature (command room live view) — not a stretch goal
@@ -66,6 +75,11 @@ Phones (IP Webcam MJPEG, shared WiFi network)
 - Do not add cross-camera correlation logic — post-MVP
 - Do not add threat scoring — post-MVP
 - Do not use `cv2.imshow()` — headless server environment
+
+## File layout
+- `tests/` — pytest unit tests (TDD, no real network/hardware)
+- `tools/` — manual smoke tests that hit real APIs/hardware (require `.env`, not run by pytest)
+- No smoke scripts or one-off scripts in the project root
 
 ## Testing without phones
 Set `url: 0` (local webcam) or `url: ./test_footage/video.mp4` in `config.yaml` camera entries.
