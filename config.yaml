@@ -17,5 +17,17 @@ cameras:
 
 detection:
   interval_frames: 3        # run detector every N frames
-  crowd_threshold: 3        # persons in frame to trigger crowd event
-  event_cooldown_s: 30      # seconds before same (cam, event) can re-alert
+  crowd_threshold: 3        # persons needed to trigger CROWD_FORMED (change freely)
+
+  # Cooldowns
+  event_cooldown_s: 30      # NORMAL and SUSPICIOUS events
+  high_alert_cooldown_s: 10 # HIGH_ALERT events (weapons etc.)
+
+  # Suspicious behaviour timers
+  loitering_timeout_s: 45       # seconds stationary before LOITERING fires
+  running_threshold_px: 80      # centroid pixels/detection interval = running
+  abandoned_timeout_s: 60       # seconds bag visible alone before ABANDONED_OBJECT
+  abandoned_proximity_px: 150   # px radius — person within this = bag not abandoned
+
+  # Weapon model (optional)
+  weapon_model_path: null   # path to .pt with pistol/rifle/assault_rifle classes

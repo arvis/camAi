@@ -612,3 +612,190 @@ class TestDetectorTrackingHappy:
 
         # Internal centroid deque must not grow beyond 10
         assert len(det._centroids[1]) <= 10
+
+
+# ---------------------------------------------------------------------------
+# Step 4 additions — new TARGET_CLASSES, velocity_px, weapon model, colours
+# ---------------------------------------------------------------------------
+
+# Extended names dict that includes the new classes
+NAMES_EXT = {
+    0: "person", 2: "car", 7: "truck", 3: "motorcycle", 1: "bicycle",
+    24: "backpack", 26: "handbag", 28: "suitcase", 43: "knife",
+}
+
+
+class TestDetectorStep4UnhappyClasses:
+
+    @patch("core.detector.YOLO")
+    def test_new_bag_classes_included(self, mock_yolo_cls):
+        """backpack, handbag, suitcase must appear in counts."""
+        from core.detector import Detector
+
+        boxes = [
+            _make_box(cls_id=24, conf=0.8, x1=0, y1=0, x2=50, y2=50),  # backpack
+            _make_box(cls_id=26, conf=0.8, x1=60, y1=0, x2=110, y2=50),  # handbag
+            _make_box(cls_id=28, conf=0.8, x1=120, y1=0, x2=170, y2=50),  # suitcase
+        ]
+        mock_yolo_cls.return_value = _make_model(NAMES_EXT, [_make_result(boxes)])
+
+        det = Detector(interval_frames=1)
+        frame = np.zeros((480, 640, 3), dtype=np.uint8)
+        _, counts, _ = det.process("cam1", frame)
+
+        assert "backpack" in counts
+        assert "handbag" in counts
+        assert "suitcase" in counts
+
+    @patch("core.detector.YOLO")
+    def test_knife_included_in_target_classes(self, mock_yolo_cls):
+        """knife must appear in counts."""
+        from core.detector import Detector
+
+        box = _make_box(cls_id=43, conf=0.9, x1=0, y1=0, x2=30, y2=30)
+        mock_yolo_cls.return_value = _make_model(NAMES_EXT, [_make_result([box])])
+
+        det = Detector(interval_frames=1)
+        frame = np.zeros((480, 640, 3), dtype=np.uint8)
+        _, counts, _ = det.process("cam1", frame)
+
+        assert "knife" in counts
+
+    @patch("core.detector.YOLO")
+    def test_velocity_px_zero_on_first_appearance(self, mock_yolo_cls):
+        """velocity_px is 0.0 when a track is seen for the first time."""
+        from core.detector import Detector
+
+        box = _make_box(cls_id=0, conf=0.9, x1=100, y1=100, x2=200, y2=200, track_id=1)
+        mock_yolo_cls.return_value = _make_model(NAMES_EXT, [_make_result([box])])
+
+        det = Detector(interval_frames=1)
+        frame = np.zeros((480, 640, 3), dtype=np.uint8)
+        _, _, tracked = det.process("cam1", frame)
+
+        assert tracked[0]["velocity_px"] == 0.0
+
+    @patch("core.detector.YOLO")
+    def test_velocity_px_not_present_for_untracked_box(self, mock_yolo_cls):
+        """Box with no track_id still has velocity_px = 0.0 in tracked output."""
+        from core.detector import Detector
+
+        box = _make_box(cls_id=0, conf=0.9, x1=100, y1=100, x2=200, y2=200, track_id=None)
+        mock_yolo_cls.return_value = _make_model(NAMES_EXT, [_make_result([box])])
+
+        det = Detector(interval_frames=1)
+        frame = np.zeros((480, 640, 3), dtype=np.uint8)
+        _, _, tracked = det.process("cam1", frame)
+
+        assert "velocity_px" in tracked[0]
+        assert tracked[0]["velocity_px"] == 0.0
+
+
+class TestDetectorStep4HappyClasses:
+
+    @patch("core.detector.YOLO")
+    def test_velocity_px_correct_after_movement(self, mock_yolo_cls):
+        """velocity_px equals Euclidean distance between consecutive centroids."""
+        from core.detector import Detector
+
+        # centroid 1: (150, 150)
+        box1 = _make_box(cls_id=0, conf=0.9, x1=100, y1=100, x2=200, y2=200, track_id=1)
+        # centroid 2: (150, 250) — dy=100, dx=0 → velocity=100.0
+        box2 = _make_box(cls_id=0, conf=0.9, x1=100, y1=200, x2=200, y2=300, track_id=1)
+
+        mock_model = MagicMock()
+        mock_model.names = NAMES_EXT
+        mock_model.track.side_effect = [
+            [_make_result([box1])],
+            [_make_result([box2])],
+        ]
+        mock_yolo_cls.return_value = mock_model
+
+        det = Detector(interval_frames=1)
+        frame = np.zeros((480, 640, 3), dtype=np.uint8)
+
+        det.process("cam1", frame)
+        _, _, tracked = det.process("cam1", frame)
+
+        assert abs(tracked[0]["velocity_px"] - 100.0) < 1e-6
+
+    @patch("core.detector.YOLO")
+    def test_all_new_target_classes_in_tracked(self, mock_yolo_cls):
+        """backpack, handbag, suitcase, knife all appear in tracked_objects."""
+        from core.detector import Detector
+
+        boxes = [
+            _make_box(cls_id=24, conf=0.8, x1=0, y1=0, x2=50, y2=50, track_id=1),
+            _make_box(cls_id=26, conf=0.8, x1=60, y1=0, x2=110, y2=50, track_id=2),
+            _make_box(cls_id=28, conf=0.8, x1=120, y1=0, x2=170, y2=50, track_id=3),
+            _make_box(cls_id=43, conf=0.9, x1=0, y1=60, x2=30, y2=90, track_id=4),
+        ]
+        mock_yolo_cls.return_value = _make_model(NAMES_EXT, [_make_result(boxes)])
+
+        det = Detector(interval_frames=1)
+        frame = np.zeros((480, 640, 3), dtype=np.uint8)
+        _, _, tracked = det.process("cam1", frame)
+
+        class_names = {obj["class_name"] for obj in tracked}
+        assert class_names == {"backpack", "handbag", "suitcase", "knife"}
+
+
+class TestDetectorStep4WeaponModel:
+
+    @patch("core.detector.YOLO")
+    def test_weapon_model_not_loaded_when_path_is_none(self, mock_yolo_cls):
+        """No second YOLO instance created when weapon_model_path is None."""
+        from core.detector import Detector
+
+        mock_yolo_cls.return_value = _make_model(NAMES_EXT, [_make_result([])])
+        Detector(interval_frames=1, weapon_model_path=None)
+        # YOLO called exactly once (main model only)
+        assert mock_yolo_cls.call_count == 1
+
+    @patch("core.detector.YOLO")
+    def test_weapon_model_loaded_when_path_provided(self, mock_yolo_cls):
+        """Second YOLO instance created when weapon_model_path is given."""
+        from core.detector import Detector
+
+        mock_yolo_cls.return_value = _make_model(NAMES_EXT, [_make_result([])])
+        Detector(interval_frames=1, weapon_model_path="weapons.pt")
+        assert mock_yolo_cls.call_count == 2
+
+    @patch("core.detector.YOLO")
+    def test_weapon_model_results_merged_into_counts(self, mock_yolo_cls):
+        """Detections from weapon model are merged into the same counts dict."""
+        from core.detector import Detector
+
+        weapon_names = {0: "pistol", 1: "rifle"}
+        main_model = _make_model(NAMES_EXT, [_make_result([])])
+        weapon_model = _make_model(weapon_names, [
+            _make_result([_make_box(cls_id=0, conf=0.95, x1=10, y1=10, x2=50, y2=50)])
+        ])
+        mock_yolo_cls.side_effect = [main_model, weapon_model]
+
+        det = Detector(interval_frames=1, weapon_model_path="weapons.pt")
+        frame = np.zeros((480, 640, 3), dtype=np.uint8)
+        _, counts, _ = det.process("cam1", frame)
+
+        assert "pistol" in counts
+        assert counts["pistol"] == 1
+
+    @patch("core.detector.YOLO")
+    def test_weapon_model_tracked_objects_merged(self, mock_yolo_cls):
+        """Tracked objects from weapon model appear in the tracked list."""
+        from core.detector import Detector
+
+        weapon_names = {0: "pistol"}
+        main_model = _make_model(NAMES_EXT, [_make_result([])])
+        weapon_model = _make_model(weapon_names, [
+            _make_result([_make_box(cls_id=0, conf=0.95, x1=10, y1=10, x2=50, y2=50,
+                                    track_id=99)])
+        ])
+        mock_yolo_cls.side_effect = [main_model, weapon_model]
+
+        det = Detector(interval_frames=1, weapon_model_path="weapons.pt")
+        frame = np.zeros((480, 640, 3), dtype=np.uint8)
+        _, _, tracked = det.process("cam1", frame)
+
+        class_names = {obj["class_name"] for obj in tracked}
+        assert "pistol" in class_names
