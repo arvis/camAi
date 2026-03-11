@@ -18,6 +18,13 @@ Phones (IP Webcam MJPEG, shared WiFi network)
         → api/ — MJPEG streams + WebSocket → dashboard (command room)
 ```
 
+## Testing discipline (mandatory)
+
+- Write tests **before** writing implementation code (TDD)
+- Write failing/unhappy path tests **first**, before happy path tests
+- Code is only correct when all tests pass — do not mark a task done until tests are green
+- Never write implementation to make a specific test pass by hardcoding; tests must reflect real behaviour
+
 ## Key rules
 
 ### LLM provider
