@@ -1,0 +1,21 @@
+cameras:
+  # --- Real phones (IP Webcam app) ---
+  # - id: cam1
+  #   name: Drone-1
+  #   url: http://192.168.1.10:8080/video
+  # - id: cam2
+  #   name: Checkpoint
+  #   url: http://192.168.1.11:8080/video
+
+  # --- Testing without phones ---
+  - id: cam1
+    name: Test-Webcam
+    url: 0                              # laptop webcam (integer → cv2.VideoCapture(0))
+  # - id: cam2
+  #   name: Test-Video
+  #   url: ./test_footage/drone.mp4    # any .mp4 file — just drop it in test_footage/
+
+detection:
+  interval_frames: 3        # run detector every N frames
+  crowd_threshold: 3        # persons in frame to trigger crowd event
+  event_cooldown_s: 30      # seconds before same (cam, event) can re-alert

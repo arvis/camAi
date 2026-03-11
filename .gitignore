@@ -1,0 +1,31 @@
+# Virtual environment
+.venv/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+
+# Secrets
+.env
+
+# Test / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# VS Code
+.vscode/settings.json
+
+# Model weights (large binary)
+*.pt
+*.onnx
+
+# Test footage (large video files)
+test_footage/
+
+# OS
+.DS_Store
+Thumbs.db
