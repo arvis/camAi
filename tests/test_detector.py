@@ -12,12 +12,14 @@ from unittest.mock import MagicMock, patch
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _make_box(cls_id: int, conf: float, x1: int, y1: int, x2: int, y2: int):
+def _make_box(cls_id: int, conf: float, x1: int, y1: int, x2: int, y2: int,
+              track_id=None):
     """Build a mock YOLO box with list-indexable attributes."""
     box = MagicMock()
     box.cls = [cls_id]
     box.conf = [conf]
     box.xyxy = [np.array([x1, y1, x2, y2], dtype=float)]
+    box.id = [track_id] if track_id is not None else None
     return box
 
 
@@ -29,13 +31,11 @@ def _make_result(boxes):
 
 
 def _make_model(names: dict, results_per_call=None):
-    """Build a mock YOLO model instance."""
+    """Build a mock YOLO model instance (mocks model.track)."""
     model = MagicMock()
     model.names = names
-    if results_per_call is not None:
-        model.return_value = results_per_call
-    else:
-        model.return_value = []
+    results = results_per_call if results_per_call is not None else []
+    model.track.return_value = results
     return model
 
 
@@ -45,7 +45,7 @@ NAMES = {0: "person", 2: "car", 3: "motorcycle", 5: "bus", 7: "truck",
 
 
 # ---------------------------------------------------------------------------
-# Unhappy paths
+# Unhappy paths — detection
 # ---------------------------------------------------------------------------
 
 class TestDetectorUnhappy:
@@ -61,7 +61,7 @@ class TestDetectorUnhappy:
 
         det = Detector(interval_frames=1)
         frame = np.zeros((480, 640, 3), dtype=np.uint8)
-        _, counts = det.process("cam1", frame)
+        _, counts, _ = det.process("cam1", frame)
 
         assert "cat" not in counts
         assert counts == {}
@@ -75,7 +75,7 @@ class TestDetectorUnhappy:
 
         det = Detector(interval_frames=1)
         frame = np.zeros((480, 640, 3), dtype=np.uint8)
-        _, counts = det.process("cam1", frame)
+        _, counts, _ = det.process("cam1", frame)
 
         assert counts == {}
 
@@ -90,7 +90,7 @@ class TestDetectorUnhappy:
 
         det = Detector(interval_frames=1)
         frame = np.zeros((480, 640, 3), dtype=np.uint8)
-        annotated, counts = det.process("cam1", frame)
+        annotated, counts, _ = det.process("cam1", frame)
 
         assert counts == {}
         assert annotated.shape == frame.shape
@@ -110,7 +110,7 @@ class TestDetectorUnhappy:
         det.process("cam1", frame)  # frame 1 → skip
         det.process("cam1", frame)  # frame 2 → skip
 
-        assert mock_model.call_count == 1
+        assert mock_model.track.call_count == 1
 
     @patch("core.detector.YOLO")
     def test_skipped_frames_return_last_counts(self, mock_yolo_cls):
@@ -124,9 +124,9 @@ class TestDetectorUnhappy:
         det = Detector(interval_frames=3)
         frame = np.zeros((480, 640, 3), dtype=np.uint8)
 
-        _, counts_first = det.process("cam1", frame)   # detects: {"person": 1}
-        _, counts_second = det.process("cam1", frame)  # skipped
-        _, counts_third = det.process("cam1", frame)   # skipped
+        _, counts_first, _ = det.process("cam1", frame)   # detects: {"person": 1}
+        _, counts_second, _ = det.process("cam1", frame)  # skipped
+        _, counts_third, _ = det.process("cam1", frame)   # skipped
 
         assert counts_first == {"person": 1}
         assert counts_second == {"person": 1}
@@ -142,13 +142,13 @@ class TestDetectorUnhappy:
 
         det = Detector(interval_frames=1)
         frame = np.zeros((480, 640, 3), dtype=np.uint8)
-        _, counts = det.process("cam1", frame)
+        _, counts, _ = det.process("cam1", frame)
 
         assert "bus" not in counts
 
 
 # ---------------------------------------------------------------------------
-# Happy paths
+# Happy paths — detection
 # ---------------------------------------------------------------------------
 
 class TestDetectorHappy:
@@ -162,7 +162,7 @@ class TestDetectorHappy:
 
         det = Detector(interval_frames=1)
         frame = np.zeros((480, 640, 3), dtype=np.uint8)
-        _, counts = det.process("cam1", frame)
+        _, counts, _ = det.process("cam1", frame)
 
         assert counts == {"person": 1}
 
@@ -180,7 +180,7 @@ class TestDetectorHappy:
 
         det = Detector(interval_frames=1)
         frame = np.zeros((480, 640, 3), dtype=np.uint8)
-        _, counts = det.process("cam1", frame)
+        _, counts, _ = det.process("cam1", frame)
 
         assert counts == {"person": 2, "car": 1}
 
@@ -194,7 +194,7 @@ class TestDetectorHappy:
 
         det = Detector(interval_frames=1)
         frame = np.zeros((480, 640, 3), dtype=np.uint8)
-        annotated, _ = det.process("cam1", frame)
+        annotated, _, _ = det.process("cam1", frame)
 
         assert annotated.shape == frame.shape
 
@@ -213,7 +213,7 @@ class TestDetectorHappy:
             det.process("cam1", frame)
 
         # frames 0, 3, 6 → 3 calls
-        assert mock_model.call_count == 3
+        assert mock_model.track.call_count == 3
 
     @patch("core.detector.YOLO")
     def test_independent_frame_counters_per_camera(self, mock_yolo_cls):
@@ -232,7 +232,7 @@ class TestDetectorHappy:
         det.process("cam2", frame)
 
         # Both first frames → 2 model calls
-        assert mock_model.call_count == 2
+        assert mock_model.track.call_count == 2
 
     @patch("core.detector.YOLO")
     def test_interval_one_detects_every_frame(self, mock_yolo_cls):
@@ -248,7 +248,7 @@ class TestDetectorHappy:
         for _ in range(5):
             det.process("cam1", frame)
 
-        assert mock_model.call_count == 5
+        assert mock_model.track.call_count == 5
 
     @patch("core.detector.YOLO")
     def test_model_loaded_once_at_init(self, mock_yolo_cls):
@@ -277,6 +277,338 @@ class TestDetectorHappy:
 
         det = Detector(interval_frames=1)
         frame = np.zeros((480, 640, 3), dtype=np.uint8)
-        _, counts = det.process("cam1", frame)
+        _, counts, _ = det.process("cam1", frame)
 
         assert set(counts.keys()) == {"person", "car", "motorcycle", "bicycle", "truck"}
+
+
+# ---------------------------------------------------------------------------
+# Unhappy paths — tracking
+# ---------------------------------------------------------------------------
+
+class TestDetectorTrackingUnhappy:
+    @patch("core.detector.YOLO")
+    def test_box_with_no_track_id_returns_unknown_direction(self, mock_yolo_cls):
+        """box.id is None → movement_direction is 'unknown'."""
+        from core.detector import Detector
+
+        box = _make_box(cls_id=0, conf=0.9, x1=10, y1=10, x2=100, y2=200,
+                        track_id=None)
+        mock_yolo_cls.return_value = _make_model(NAMES, [_make_result([box])])
+
+        det = Detector(interval_frames=1)
+        frame = np.zeros((480, 640, 3), dtype=np.uint8)
+        _, _, tracked = det.process("cam1", frame)
+
+        assert len(tracked) == 1
+        assert tracked[0]["track_id"] is None
+        assert tracked[0]["movement_direction"] == "unknown"
+
+    @patch("core.detector.YOLO")
+    def test_no_detections_returns_empty_tracked_list(self, mock_yolo_cls):
+        """Empty boxes → tracked_objects is []."""
+        from core.detector import Detector
+
+        mock_yolo_cls.return_value = _make_model(NAMES, [_make_result([])])
+
+        det = Detector(interval_frames=1)
+        frame = np.zeros((480, 640, 3), dtype=np.uint8)
+        _, _, tracked = det.process("cam1", frame)
+
+        assert tracked == []
+
+    @patch("core.detector.YOLO")
+    def test_none_boxes_returns_empty_tracked_list(self, mock_yolo_cls):
+        """result.boxes is None → tracked_objects is []."""
+        from core.detector import Detector
+
+        result = MagicMock()
+        result.boxes = None
+        mock_yolo_cls.return_value = _make_model(NAMES, [result])
+
+        det = Detector(interval_frames=1)
+        frame = np.zeros((480, 640, 3), dtype=np.uint8)
+        _, _, tracked = det.process("cam1", frame)
+
+        assert tracked == []
+
+    @patch("core.detector.YOLO")
+    def test_single_frame_with_track_id_returns_stationary(self, mock_yolo_cls):
+        """Only one centroid stored → cannot compute direction → stationary."""
+        from core.detector import Detector
+
+        box = _make_box(cls_id=0, conf=0.9, x1=100, y1=100, x2=200, y2=200,
+                        track_id=1)
+        mock_yolo_cls.return_value = _make_model(NAMES, [_make_result([box])])
+
+        det = Detector(interval_frames=1)
+        frame = np.zeros((480, 640, 3), dtype=np.uint8)
+        _, _, tracked = det.process("cam1", frame)
+
+        assert tracked[0]["movement_direction"] == "stationary"
+
+    @patch("core.detector.YOLO")
+    def test_tiny_movement_returns_stationary(self, mock_yolo_cls):
+        """Movement of < 15px total → stationary."""
+        from core.detector import Detector
+
+        # centroid frame 1: (150, 150)
+        box1 = _make_box(cls_id=0, conf=0.9, x1=100, y1=100, x2=200, y2=200,
+                         track_id=1)
+        # centroid frame 2: (155, 153) — movement of ~5.8px
+        box2 = _make_box(cls_id=0, conf=0.9, x1=105, y1=103, x2=205, y2=203,
+                         track_id=1)
+
+        mock_model = MagicMock()
+        mock_model.names = NAMES
+        mock_model.track.side_effect = [
+            [_make_result([box1])],
+            [_make_result([box2])],
+        ]
+        mock_yolo_cls.return_value = mock_model
+
+        det = Detector(interval_frames=1)
+        frame = np.zeros((480, 640, 3), dtype=np.uint8)
+
+        det.process("cam1", frame)
+        _, _, tracked = det.process("cam1", frame)
+
+        assert tracked[0]["movement_direction"] == "stationary"
+
+    @patch("core.detector.YOLO")
+    def test_non_target_class_not_in_tracked_list(self, mock_yolo_cls):
+        """Non-target class (cat) must not appear in tracked_objects."""
+        from core.detector import Detector
+
+        cat_box = _make_box(cls_id=15, conf=0.9, x1=10, y1=10, x2=50, y2=50,
+                            track_id=5)
+        mock_yolo_cls.return_value = _make_model(NAMES, [_make_result([cat_box])])
+
+        det = Detector(interval_frames=1)
+        frame = np.zeros((480, 640, 3), dtype=np.uint8)
+        _, _, tracked = det.process("cam1", frame)
+
+        assert tracked == []
+
+    @patch("core.detector.YOLO")
+    def test_skipped_frame_returns_last_tracked(self, mock_yolo_cls):
+        """Skipped frames return cached tracked_objects from last detection."""
+        from core.detector import Detector
+
+        box = _make_box(cls_id=0, conf=0.9, x1=10, y1=10, x2=100, y2=200,
+                        track_id=7)
+        mock_yolo_cls.return_value = _make_model(NAMES, [_make_result([box])])
+
+        det = Detector(interval_frames=3)
+        frame = np.zeros((480, 640, 3), dtype=np.uint8)
+
+        _, _, tracked_first = det.process("cam1", frame)   # frame 0 → detects
+        _, _, tracked_skip = det.process("cam1", frame)    # frame 1 → skipped
+
+        assert len(tracked_first) == 1
+        assert tracked_skip == tracked_first
+
+
+# ---------------------------------------------------------------------------
+# Happy paths — tracking
+# ---------------------------------------------------------------------------
+
+class TestDetectorTrackingHappy:
+    @patch("core.detector.YOLO")
+    def test_box_with_track_id_returned(self, mock_yolo_cls):
+        """Valid track_id is present in tracked_objects."""
+        from core.detector import Detector
+
+        box = _make_box(cls_id=0, conf=0.9, x1=10, y1=10, x2=100, y2=200,
+                        track_id=42)
+        mock_yolo_cls.return_value = _make_model(NAMES, [_make_result([box])])
+
+        det = Detector(interval_frames=1)
+        frame = np.zeros((480, 640, 3), dtype=np.uint8)
+        _, _, tracked = det.process("cam1", frame)
+
+        assert len(tracked) == 1
+        assert tracked[0]["track_id"] == 42
+
+    @patch("core.detector.YOLO")
+    def test_tracked_object_has_required_fields(self, mock_yolo_cls):
+        """tracked_objects entries must have track_id, class_name, movement_direction, bbox, confidence."""
+        from core.detector import Detector
+
+        box = _make_box(cls_id=0, conf=0.85, x1=10, y1=10, x2=100, y2=200,
+                        track_id=1)
+        mock_yolo_cls.return_value = _make_model(NAMES, [_make_result([box])])
+
+        det = Detector(interval_frames=1)
+        frame = np.zeros((480, 640, 3), dtype=np.uint8)
+        _, _, tracked = det.process("cam1", frame)
+
+        obj = tracked[0]
+        assert "track_id" in obj
+        assert "class_name" in obj
+        assert "movement_direction" in obj
+        assert "bbox" in obj
+        assert "confidence" in obj
+        assert obj["class_name"] == "person"
+        assert abs(obj["confidence"] - 0.85) < 1e-4
+
+    @patch("core.detector.YOLO")
+    def test_movement_south(self, mock_yolo_cls):
+        """Centroid moves down (dy > 0, |dy| > |dx|) → direction S."""
+        from core.detector import Detector
+
+        # centroid: (150, 150)
+        box1 = _make_box(cls_id=0, conf=0.9, x1=100, y1=100, x2=200, y2=200,
+                         track_id=1)
+        # centroid: (150, 300) — dy=150, dx=0 → S
+        box2 = _make_box(cls_id=0, conf=0.9, x1=100, y1=250, x2=200, y2=350,
+                         track_id=1)
+
+        mock_model = MagicMock()
+        mock_model.names = NAMES
+        mock_model.track.side_effect = [
+            [_make_result([box1])],
+            [_make_result([box2])],
+        ]
+        mock_yolo_cls.return_value = mock_model
+
+        det = Detector(interval_frames=1)
+        frame = np.zeros((480, 640, 3), dtype=np.uint8)
+
+        det.process("cam1", frame)
+        _, _, tracked = det.process("cam1", frame)
+
+        assert tracked[0]["movement_direction"] == "S"
+
+    @patch("core.detector.YOLO")
+    def test_movement_north(self, mock_yolo_cls):
+        """Centroid moves up (dy < 0, |dy| > |dx|) → direction N."""
+        from core.detector import Detector
+
+        box1 = _make_box(cls_id=0, conf=0.9, x1=100, y1=250, x2=200, y2=350,
+                         track_id=2)
+        box2 = _make_box(cls_id=0, conf=0.9, x1=100, y1=100, x2=200, y2=200,
+                         track_id=2)
+
+        mock_model = MagicMock()
+        mock_model.names = NAMES
+        mock_model.track.side_effect = [
+            [_make_result([box1])],
+            [_make_result([box2])],
+        ]
+        mock_yolo_cls.return_value = mock_model
+
+        det = Detector(interval_frames=1)
+        frame = np.zeros((480, 640, 3), dtype=np.uint8)
+
+        det.process("cam1", frame)
+        _, _, tracked = det.process("cam1", frame)
+
+        assert tracked[0]["movement_direction"] == "N"
+
+    @patch("core.detector.YOLO")
+    def test_movement_east(self, mock_yolo_cls):
+        """Centroid moves right (dx > 0, |dx| >= |dy|) → direction E."""
+        from core.detector import Detector
+
+        box1 = _make_box(cls_id=0, conf=0.9, x1=100, y1=100, x2=200, y2=200,
+                         track_id=3)
+        box2 = _make_box(cls_id=0, conf=0.9, x1=300, y1=100, x2=400, y2=200,
+                         track_id=3)
+
+        mock_model = MagicMock()
+        mock_model.names = NAMES
+        mock_model.track.side_effect = [
+            [_make_result([box1])],
+            [_make_result([box2])],
+        ]
+        mock_yolo_cls.return_value = mock_model
+
+        det = Detector(interval_frames=1)
+        frame = np.zeros((480, 640, 3), dtype=np.uint8)
+
+        det.process("cam1", frame)
+        _, _, tracked = det.process("cam1", frame)
+
+        assert tracked[0]["movement_direction"] == "E"
+
+    @patch("core.detector.YOLO")
+    def test_movement_west(self, mock_yolo_cls):
+        """Centroid moves left (dx < 0, |dx| >= |dy|) → direction W."""
+        from core.detector import Detector
+
+        box1 = _make_box(cls_id=0, conf=0.9, x1=300, y1=100, x2=400, y2=200,
+                         track_id=4)
+        box2 = _make_box(cls_id=0, conf=0.9, x1=100, y1=100, x2=200, y2=200,
+                         track_id=4)
+
+        mock_model = MagicMock()
+        mock_model.names = NAMES
+        mock_model.track.side_effect = [
+            [_make_result([box1])],
+            [_make_result([box2])],
+        ]
+        mock_yolo_cls.return_value = mock_model
+
+        det = Detector(interval_frames=1)
+        frame = np.zeros((480, 640, 3), dtype=np.uint8)
+
+        det.process("cam1", frame)
+        _, _, tracked = det.process("cam1", frame)
+
+        assert tracked[0]["movement_direction"] == "W"
+
+    @patch("core.detector.YOLO")
+    def test_multiple_tracks_independent(self, mock_yolo_cls):
+        """Two different track IDs maintain independent centroid histories."""
+        from core.detector import Detector
+
+        # Track 1 moves east, track 2 moves south
+        b1a = _make_box(cls_id=0, conf=0.9, x1=100, y1=100, x2=200, y2=200, track_id=1)
+        b2a = _make_box(cls_id=0, conf=0.9, x1=300, y1=100, x2=400, y2=200, track_id=2)
+
+        b1b = _make_box(cls_id=0, conf=0.9, x1=300, y1=100, x2=400, y2=200, track_id=1)
+        b2b = _make_box(cls_id=0, conf=0.9, x1=300, y1=300, x2=400, y2=400, track_id=2)
+
+        mock_model = MagicMock()
+        mock_model.names = NAMES
+        mock_model.track.side_effect = [
+            [_make_result([b1a, b2a])],
+            [_make_result([b1b, b2b])],
+        ]
+        mock_yolo_cls.return_value = mock_model
+
+        det = Detector(interval_frames=1)
+        frame = np.zeros((480, 640, 3), dtype=np.uint8)
+
+        det.process("cam1", frame)
+        _, _, tracked = det.process("cam1", frame)
+
+        by_id = {obj["track_id"]: obj for obj in tracked}
+        assert by_id[1]["movement_direction"] == "E"
+        assert by_id[2]["movement_direction"] == "S"
+
+    @patch("core.detector.YOLO")
+    def test_centroid_history_capped_at_ten(self, mock_yolo_cls):
+        """Centroid history is capped at 10 — oldest entry dropped after 10 frames."""
+        from core.detector import Detector
+
+        # All boxes at same position — stationary throughout
+        boxes = [
+            _make_box(cls_id=0, conf=0.9, x1=100, y1=100, x2=200, y2=200,
+                      track_id=1)
+        ]
+
+        mock_model = MagicMock()
+        mock_model.names = NAMES
+        mock_model.track.return_value = [_make_result(boxes)]
+        mock_yolo_cls.return_value = mock_model
+
+        det = Detector(interval_frames=1)
+        frame = np.zeros((480, 640, 3), dtype=np.uint8)
+
+        for _ in range(15):
+            det.process("cam1", frame)
+
+        # Internal centroid deque must not grow beyond 10
+        assert len(det._centroids[1]) <= 10
