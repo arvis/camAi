@@ -138,6 +138,18 @@ class Detector:
 
         self._last_counts[camera_id] = counts
         self._last_tracked[camera_id] = tracked
+
+        # Person count overlay (top-left corner)
+        person_count = counts.get("person", 0)
+        label = f"Persons: {person_count}"
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        font_scale = 0.8
+        thickness = 2
+        (tw, th), baseline = cv2.getTextSize(label, font, font_scale, thickness)
+        pad = 6
+        cv2.rectangle(annotated, (8, 8), (8 + tw + pad * 2, 8 + th + pad * 2 + baseline), (0, 0, 0), -1)
+        cv2.putText(annotated, label, (8 + pad, 8 + pad + th), font, font_scale, (0, 255, 0), thickness, cv2.LINE_AA)
+
         return annotated, counts, tracked
 
     def _run_model(

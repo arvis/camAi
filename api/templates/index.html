@@ -210,12 +210,13 @@
   </div>
 </div>
 
+<!-- Camera data island — replaced server-side in create_app -->
+<script id="cam-data" type="application/json">CAM_DATA_PLACEHOLDER</script>
+
 <script>
   // ── Camera tiles ──────────────────────────────────────────────────────────
   // The server injects the camera list via a JSON island so the JS stays static
-  const CAMERAS = JSON.parse(document.getElementById('cam-data')
-    ? document.getElementById('cam-data').textContent
-    : '[]');
+  const CAMERAS = JSON.parse(document.getElementById('cam-data').textContent || '[]');
 
   (function buildGrid() {
     const grid = document.getElementById('streams');
@@ -300,9 +301,6 @@
 
   connect();
 </script>
-
-<!-- Camera data island — replaced server-side in create_app -->
-<script id="cam-data" type="application/json">CAM_DATA_PLACEHOLDER</script>
 
 </body>
 </html>

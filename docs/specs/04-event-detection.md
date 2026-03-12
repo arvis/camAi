@@ -22,7 +22,7 @@ repeated threat signals during an incident.
 |-------|---------|----------|
 | `PERSON_DETECTED` | Person count 0 → 1+ | NORMAL |
 | `VEHICLE_ARRIVED` | Car or truck count 0 → 1+ | NORMAL |
-| `CROWD_FORMED` | Person count ≥ `crowd_threshold` (see config, **change this freely**) | NORMAL |
+| ~~`CROWD_FORMED`~~ | ~~Person count ≥ `crowd_threshold`~~ | ~~NORMAL~~ — **disabled**: fires too aggressively; threshold tuning needed before re-enabling |
 | `PERSON_MOVING` | Any tracked person direction ≠ stationary | NORMAL |
 | `AREA_CLEARED` | All counts drop to 0 after non-empty state | NORMAL |
 | `LOITERING` | Same person track_id stationary for > `loitering_timeout_s` | SUSPICIOUS |

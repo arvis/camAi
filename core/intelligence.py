@@ -34,11 +34,15 @@ _SYSTEM_PROMPT = (
 _VISION_PROMPT = (
     "You are a tactical analyst reviewing a surveillance frame. "
     "Answer YES if ANY of the following are visible on the person: "
-    "helmet, tactical vest, military uniform, combat boots, weapon, firearm, "
-    "ammunition pouches, or any other military/combat equipment. "
+    "helmet, tactical vest, military uniform, combat boots, weapon, firearm, knife, "
+    "ammunition pouches, military/combat equipment, "
+    "face covering (balaclava, mask) combined with dark clothing, "
+    "suspicious bulge under clothing that may indicate concealed weapon, "
+    "or any behaviour or appearance consistent with a terrorist or armed threat. "
     "A single indicator is enough to answer YES. "
-    "Answer NO only if none of these indicators are present. "
-    "Start your response with YES or NO, then briefly state which indicator(s) you saw. "
+    "Answer NO only if the person appears clearly civilian with no threat indicators. "
+    "Start your response with YES or NO, then briefly state which indicator(s) you saw "
+    "and classify the threat type: MILITARY, TERRORIST, or ARMED_CIVILIAN. "
     "Also note any colored IFF identification bands (red/blue armbands, headbands)."
 )
 
@@ -153,6 +157,8 @@ class SituationReporter:
                             visual_notes.append((ev.camera_name, analysis))
                             if _is_military(analysis):
                                 await self._send_military_alert(ev, analysis)
+                            else:
+                                print(f"[VISION] {ev.camera_name}: no threat — {analysis.strip()}")
                     except Exception as exc:
                         logger.warning("Vision analysis failed for %s: %s", ev.camera_name, exc)
 
@@ -221,10 +227,19 @@ _MILITARY_KEYWORDS = frozenset({
     "pistol",
     "gun",
     "firearm",
+    "knife",
     "soldier",
     "combatant",
     "armband",
     "iff",
+    "terrorist",
+    "armed_civilian",
+    "balaclava",
+    "mask",
+    "threat",
+    "weapon",
+    "explosive",
+    "suspicious",
 })
 
 

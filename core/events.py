@@ -157,8 +157,9 @@ class EventDetector:
         if prev_vehicle == 0 and curr_vehicle >= 1:
             emit("VEHICLE_ARRIVED", EventSeverity.NORMAL)
 
-        if curr_person >= self.crowd_threshold:
-            emit("CROWD_FORMED", EventSeverity.NORMAL)
+        # CROWD_FORMED disabled — fires too aggressively at current thresholds
+        # if curr_person >= self.crowd_threshold:
+        #     emit("CROWD_FORMED", EventSeverity.NORMAL)
 
         # AREA_CLEARED: all counts drop to 0 after non-empty previous state
         if counts == {} and self.prev_counts:
