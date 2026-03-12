@@ -16,6 +16,7 @@ import logging
 import threading
 import time
 from datetime import datetime, timezone
+from typing import Awaitable, Callable
 
 from core.alerts import AlertSender
 from core.events import AlertLevel, Event, EventSeverity
@@ -65,6 +66,9 @@ class SituationReporter:
         event with a frame snapshot is checked via the vision provider for
         military indicators — a CRITICAL alert is sent if detected. When
         NORMAL, vision checks are skipped.
+    report_callback : Callable[[str], Awaitable[None]] | None
+        Optional async callback invoked with the report text after it is
+        posted to Slack. Used to push the report to WebSocket clients.
     """
 
     def __init__(
@@ -75,6 +79,7 @@ class SituationReporter:
         camera_names: dict[str, str] | None = None,
         vision_provider: VisionProvider | None = None,
         alert_level: AlertLevel = AlertLevel.HIGH,
+        report_callback: Callable[[str], Awaitable[None]] | None = None,
     ) -> None:
         self._llm = llm
         self._sender = alert_sender
@@ -82,6 +87,7 @@ class SituationReporter:
         self._camera_names: dict[str, str] = dict(camera_names or {})
         self._vision = vision_provider
         self._alert_level = alert_level
+        self._report_callback = report_callback
         self._events: list[Event] = []
         self._lock = threading.Lock()
 
@@ -162,6 +168,12 @@ class SituationReporter:
             await self._sender.send_report(report)
         except Exception as exc:
             logger.warning("Failed to post situation report: %s", exc)
+
+        if self._report_callback is not None:
+            try:
+                await self._report_callback(report)
+            except Exception as exc:
+                logger.warning("Report callback failed: %s", exc)
 
 
 # ---------------------------------------------------------------------------

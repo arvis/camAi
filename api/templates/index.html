@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tactical Vision AI</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0a0c0f;
+      --surface:   #111418;
+      --border:    #1e2530;
+      --accent:    #00d4ff;
+      --danger:    #ff3c3c;
+      --warn:      #ffaa00;
+      --ok:        #00e676;
+      --text:      #c8d6e5;
+      --muted:     #5a6a7e;
+      --critical:  #ff1744;
+      --high:      #ff6d00;
+      --suspicious:#ffd600;
+      --normal:    #00e676;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 13px;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Header ── */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 18px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+    }
+    header h1 {
+      font-size: 15px;
+      letter-spacing: 2px;
+      color: var(--accent);
+      text-transform: uppercase;
+    }
+    #live-badge {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      color: var(--ok);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    #live-badge::before {
+      content: '';
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--ok);
+      animation: pulse 1.4s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.3; }
+    }
+
+    /* ── Camera grid ── */
+    #streams {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: 8px;
+      padding: 10px;
+      flex: 1 1 auto;
+    }
+    .cam-tile {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      overflow: hidden;
+      position: relative;
+    }
+    .cam-tile img {
+      width: 100%;
+      display: block;
+      background: #000;
+      min-height: 180px;
+    }
+    .cam-label {
+      position: absolute;
+      top: 6px; left: 8px;
+      background: rgba(0,0,0,0.65);
+      padding: 2px 7px;
+      border-radius: 3px;
+      font-size: 11px;
+      letter-spacing: 1px;
+      color: var(--accent);
+      text-transform: uppercase;
+    }
+
+    /* ── Bottom panels ── */
+    #bottom {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      padding: 0 10px 10px;
+      min-height: 220px;
+      max-height: 280px;
+    }
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .panel-header {
+      padding: 6px 10px;
+      border-bottom: 1px solid var(--border);
+      font-size: 10px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .panel-body {
+      flex: 1 1 auto;
+      overflow-y: auto;
+      padding: 6px 8px;
+    }
+    .panel-body::-webkit-scrollbar { width: 4px; }
+    .panel-body::-webkit-scrollbar-track { background: transparent; }
+    .panel-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    /* ── Alert log ── */
+    .alert-row {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      padding: 3px 0;
+      border-bottom: 1px solid var(--border);
+      animation: fadein 0.3s ease;
+    }
+    .alert-row:last-child { border-bottom: none; }
+    @keyframes fadein { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; } }
+    .alert-time  { color: var(--muted); font-size: 11px; min-width: 54px; }
+    .alert-cam   { color: var(--accent); font-size: 11px; min-width: 80px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .alert-type  { flex: 1; font-size: 12px; }
+    .sev-CRITICAL   { color: var(--critical); font-weight: bold; }
+    .sev-HIGH_ALERT { color: var(--high); }
+    .sev-SUSPICIOUS { color: var(--suspicious); }
+    .sev-NORMAL     { color: var(--normal); }
+
+    /* ── Situation report ── */
+    #report-text {
+      white-space: pre-wrap;
+      word-break: break-word;
+      color: var(--text);
+      line-height: 1.55;
+      font-size: 12px;
+    }
+    #report-ts {
+      font-size: 10px;
+      color: var(--muted);
+      margin-top: 6px;
+    }
+
+    /* ── Connection status ── */
+    #ws-status {
+      font-size: 10px;
+      padding: 2px 8px;
+      border-radius: 3px;
+    }
+    .ws-ok   { color: var(--ok); }
+    .ws-err  { color: var(--danger); }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>&#9670; Tactical Vision AI</h1>
+  <div style="display:flex;align-items:center;gap:16px;">
+    <span id="ws-status" class="ws-err">WS OFFLINE</span>
+    <span id="live-badge">Live</span>
+  </div>
+</header>
+
+<div id="streams">
+  <!-- Camera tiles injected by JS -->
+</div>
+
+<div id="bottom">
+  <div class="panel">
+    <div class="panel-header">&#9654; Alert Log</div>
+    <div class="panel-body" id="alert-log">
+      <div class="alert-row"><span class="alert-time">--:--:--</span><span class="alert-cam">—</span><span class="alert-type sev-NORMAL">Waiting for events…</span></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-header">&#9654; Situation Report</div>
+    <div class="panel-body">
+      <div id="report-text">No report yet.</div>
+      <div id="report-ts"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ── Camera tiles ──────────────────────────────────────────────────────────
+  // The server injects the camera list via a JSON island so the JS stays static
+  const CAMERAS = JSON.parse(document.getElementById('cam-data')
+    ? document.getElementById('cam-data').textContent
+    : '[]');
+
+  (function buildGrid() {
+    const grid = document.getElementById('streams');
+    if (!CAMERAS.length) {
+      grid.innerHTML = '<div style="color:var(--muted);padding:20px;">No cameras configured.</div>';
+      return;
+    }
+    CAMERAS.forEach(function(cam) {
+      const tile = document.createElement('div');
+      tile.className = 'cam-tile';
+      tile.innerHTML =
+        '<img src="/stream/' + cam.id + '" alt="' + cam.name + '" loading="lazy">' +
+        '<div class="cam-label">' + cam.name + '</div>';
+      grid.appendChild(tile);
+    });
+  })();
+
+  // ── WebSocket ─────────────────────────────────────────────────────────────
+  const MAX_ALERTS = 60;
+  const wsStatus = document.getElementById('ws-status');
+  const alertLog = document.getElementById('alert-log');
+  const reportText = document.getElementById('report-text');
+  const reportTs = document.getElementById('report-ts');
+
+  function connect() {
+    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+    const ws = new WebSocket(proto + '://' + location.host + '/ws');
+
+    ws.onopen = function() {
+      wsStatus.textContent = 'WS LIVE';
+      wsStatus.className = 'ws-ok';
+    };
+
+    ws.onclose = function() {
+      wsStatus.textContent = 'WS OFFLINE';
+      wsStatus.className = 'ws-err';
+      setTimeout(connect, 3000);   // auto-reconnect
+    };
+
+    ws.onerror = function() {
+      ws.close();
+    };
+
+    ws.onmessage = function(evt) {
+      var msg;
+      try { msg = JSON.parse(evt.data); } catch(e) { return; }
+
+      if (msg.type === 'alert') {
+        pushAlert(msg);
+      } else if (msg.type === 'report') {
+        reportText.textContent = msg.text;
+        reportTs.textContent = 'Updated ' + msg.timestamp;
+      }
+    };
+  }
+
+  function pushAlert(msg) {
+    // Remove placeholder row if present
+    const placeholder = alertLog.querySelector('.alert-row:first-child');
+    if (placeholder && placeholder.querySelector('.alert-time').textContent === '--:--:--') {
+      alertLog.removeChild(placeholder);
+    }
+
+    const row = document.createElement('div');
+    row.className = 'alert-row';
+    const sev = msg.severity || 'NORMAL';
+    const objs = msg.objects ? Object.entries(msg.objects).map(function(e){ return e[0]+':'+e[1]; }).join(' ') : '';
+    row.innerHTML =
+      '<span class="alert-time">' + (msg.timestamp || '') + '</span>' +
+      '<span class="alert-cam">'  + (msg.camera_name || '') + '</span>' +
+      '<span class="alert-type sev-' + sev + '">' + (msg.event_type || '') +
+        (objs ? ' <span style="color:var(--muted)">(' + objs + ')</span>' : '') +
+      '</span>';
+
+    alertLog.insertBefore(row, alertLog.firstChild);
+
+    // Trim old entries
+    while (alertLog.children.length > MAX_ALERTS) {
+      alertLog.removeChild(alertLog.lastChild);
+    }
+  }
+
+  connect();
+</script>
+
+<!-- Camera data island — replaced server-side in create_app -->
+<script id="cam-data" type="application/json">CAM_DATA_PLACEHOLDER</script>
+
+</body>
+</html>
